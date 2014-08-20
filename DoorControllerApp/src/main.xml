@@ -1,0 +1,335 @@
+<!-- 
+	This is a very simple program that simulates a door lock controller.
+	When launched, the door lock controller screen displays a red closed lock. The door lock controller detects nearby
+	devices (e.g. smartphones) running an authentication application (see DoorControllerClient). 
+	The latter application will send an Apstrata signature to the door lock controller, which will use the signature
+	to sign a request to Apstrata's GetUser API.
+	If GetUser returns a the user's profile, the door controller will unlock the door (displays an open lock
+	on the screen).
+	The program also simulates a breaking in attemps by detecting some pressure on the door lock (the current 
+	implementation uses the number of times a key was pressed on the keyboard)
+	After a certain threashold, a call is made to an Apstrata script to notify about the breaking in attemps.
+	The call is signed with the authentication token of the door controller (hardcoded in the below)
+-->
+<program xmlns="http://www.kinoma.com/kpr/1">
+	
+	<require path="themes/flat/theme" id="THEME"/>
+	
+	<skin id="whiteSkin" color="white"/>
+	<style id="titleStyle" font="26px" color="black" align="center"/>
+	<style id="msgStyle" font="18px" color="black" align="center"/>
+	
+	<!-- 
+		Receives the "credentials" message from the door controller client, use the provided credentials 
+		to sign a call to Apstrata's GetUser API in order to authenticate the client application.
+		If successful, use the response to display a customized welcome message
+	--> 
+	<handler path="/credentials">		
+		<behavior>			
+			<method id="onInvoke" params="handler, message">
+				<![CDATA[				
+				
+					var self = this;
+					var authRequestStr = message.query.substring(message.query.indexOf("=") + 1);
+					trace("Door controller received following user token to authenticate against Apstrata: " + authRequestStr + "\n");
+					var authRequest = JSON.parse(authRequestStr); 
+					var params = {
+	            	
+	            		"operation":"GetUser", 
+	            		"requestParams": {
+		            		"login": authRequest.user
+	            		},
+	            		"headerAuthentication": true,            		
+	            		"onSuccess": function(response) {	 
+	            			
+	            			trace("Controller successfully authenticated : " +  JSON.stringify(response) + "\n");    		
+	            			message.responseText = JSON.stringify({"authentication":"success"});
+	            			application.behavior.onGetUserSuccess(response.user, application, authRequest.instruction);  			
+	            		},
+	            		"onFailure": function(error) {
+	            		
+	            			trace("Controller could not authenticate user " + JSON.stringify(error) + "\n");
+	            			message.responseText = JSON.stringify({"authentication":"failure"});  
+	            			application.behavior.onGetUserFailure(response.user, application);
+	            		}
+	            	};
+	            	
+					var apstrataClient = application.behavior.getApstrataClient(authRequest.user, null, authRequest.credentials);
+					apstrataClient.callApi(params);					
+					
+					// Wait for a response from Apstrata before returning the response					 
+					var count = 0;					
+					while(!message.responseText && count < 30) {
+						handler.wait(1000);
+						count++;
+					}
+					
+				]]>
+			</method>
+		</behavior>
+	</handler>
+	
+	<!-- Application's behavior -->	
+	<behavior id="ApplicationBehavior">        
+		
+		<field id="touchBeganTicks" value="0" />
+		<field id="type" value="''"/>
+		<field id="lockStatus" value="'locked'" />
+	
+		<method id="onLaunch" params="application">
+			<![CDATA[
+				this.getDeviceInfo();
+			]]>
+		</method>
+		<method id="onQuit" params="application">
+			<![CDATA[
+				application.shared = false;
+			]]>
+		</method>
+		
+		 <!-- Factory method to return an instance of Apstrata client -->
+		<method id="getApstrataClient" params="id, password, token">
+            <![CDATA[              
+					
+				var ApstrataClient = require("apstrataClientModule");
+				var apstrataClient = null;
+				if (password) {
+					apstrataClient = new ApstrataClient({"authKey":AUTH_KEY, "id":id, "password":password, "url":URL});
+				}
+				
+				if (token) {
+					apstrataClient = new ApstrataClient({"authKey":AUTH_KEY, "id":id, "token":token, "url":URL});
+				}
+				
+				return apstrataClient;
+            ]]>
+        </method>
+        
+        <!-- Retrieve backend information on the current device -->
+        <method id="getDeviceInfo" params="">
+            <![CDATA[
+                
+                var apstrataClient = application.behavior.getApstrataClient(ID, PWD);
+                var params = {
+	            	
+	            		"operation":"GetDevice", 
+	            		"requestParams": {
+	            			"id": ID	            		
+	            		},
+	            		"headerAuthentication": false,            		
+	            		"onSuccess": function(response) {
+	            			
+	            			trace("Retrieved backend data on controller: " + JSON.stringify(response) + "\n");
+	            			var controlContainer = application.first; // Traversing the hierarchy: application.controlContainer
+                			var titleLabel = controlContainer.behavior.getContentFromContainer("titleLabel", controlContainer);
+                			titleLabel.string = response.device.type;
+	            			application.shared = true;
+	            			application.behavior.type = response.device.type;     			 			
+	            		},
+	            		"onFailure": function(error) {	            		
+	            			trace("Could not retrieve backend data for controller " + JSON.stringify(error) + "\n");
+	            		}
+	            	};
+	            	
+                apstrataClient.callApi(params);
+            ]]>
+        </method>
+        
+        <!-- Success handler for calls to Apstrata's GetUser API. Execute the provided instruction (lock/unlock) the door -->
+        <method id="onGetUserSuccess" params="data, application, instruction">
+            <![CDATA[            	
+                if (instruction == "open") {
+                	application.behavior.lockUnlock(true,data,application);
+                }else {
+                	application.behavior.lockUnlock(false,data,application); 
+                }                
+            ]]>
+        </method>
+        
+        <!-- Failure handler for calls to Apstrata's GetUser API. Ask for locking the door -->
+        <method id="onGetUserFailure" params="data, application">
+            <![CDATA[
+              application.behavior.lockUnlock(false,data,application);   
+            ]]>
+        </method>
+        
+        <!--
+        	Handle the unlocking/locking of the door.
+        	When door is unlocked, display a green opened lock + a message welcoming the user 
+        	When door is lock, display a red closed lock with no message
+        -->
+        <method id="lockUnlock" params="isOpen,user,application">
+            <![CDATA[
+                
+                application.behavior.lockStatus = isOpen ? "unlocked" : "locked";
+                var controlContainer = application.first; // Traversing the hierarchy: application.controlContainer
+                var lockPic = controlContainer.behavior.getContentFromContainer("lockPicture", controlContainer);
+                var informationLabel = controlContainer.behavior.getContentFromContainer("informationLabel", controlContainer);
+                if (lockPic) {
+                
+                	if (isOpen) {
+                
+                		this.isOpen = true;		                
+		                if (!informationLabel) {
+		                			                	
+		                	informationLabel = new MessageLabel();
+		                	informationLabel.name = "informationLabel";		                	
+		                	controlContainer.add(informationLabel);
+		                }
+		                
+		                informationLabel.string = "Welcome " + user.name;		               		                		                            		
+		                lockPic.url = "./assets/opened-lock.png";
+	                }else {
+	                	
+	                	this.isOpen = false;
+	                	lockPic.url = "./assets/closed-lock.png";
+	                	if (informationLabel) {
+	                		informationLabel.string = "";
+	                	}
+	                }
+	            }
+            ]]>
+        </method>
+        
+        <!-- 
+        	Handler for calls to the apstrata.kinoma.api.HandleIntrusionManagement" script running on Apstrata
+        	This method deals with both success and failure cases by logging Apstrata's response
+       	 -->
+        <method id="onInvokeInstrusionMgtResponse" params="data,application">
+            <![CDATA[                       	
+                trace("Intrusion alert sent and Apstrata responded " + JSON.stringify(data) + "\n");      
+            ]]>
+        </method>
+        <!--
+        	Simulates a listener on a pressure sensor. 
+        	After pressing a key on the keyboard a certain amount of time, the method triggers a request
+        	to execute the "apstrata.kinoma.api.HandleIntrusionManagement" script on Apstrata that start
+        	the intrusion management process.
+        	The request is signed using the device token       	 
+        -->
+        <method id="onKeyDown" params="content,key,modifiers,count,ticks">
+            <![CDATA[
+            	
+            	if (this.isOpen) {
+            		return;
+            	}
+            	
+            	if (ticks - this.timePressed < 100) {
+            		this.pressure++;
+            	}else {
+            		this.pressure = 0;
+            	}
+            	
+            	if (this.pressure > 15 && application.behavior.lockStatus == "locked") {	
+            		this.sendIntrusionAlert();		
+            	}
+            	
+            	this.timePressed = ticks;
+            ]]>
+        </method>
+        <method id="sendIntrusionAlert" params="">
+            <![CDATA[
+                
+                var params = {
+	            	
+            		"operation":"RunScript", 
+            		"requestParams": {
+            			"apsdb.scriptName":"apstrata.kinoma.api.HandleIntrusionManagement",
+            			"event": "intrusionDetected",
+            			"location": encodeURIComponent(application.behavior.type)            			
+            		},
+            		"headerAuthentication": true,
+            		"onSuccess": application.behavior.onInvokeInstrusionMgtResponse,
+            		"onFailure": application.behavior.onInvokeInstrusionMgtResponse
+            	};
+        		
+        		var apstrataClient = application.behavior.getApstrataClient(ID, null, TOKEN);
+        		apstrataClient.callApi(params);      
+            ]]>
+        </method>
+    </behavior>
+	
+	<container id="ControllerContainer" top="0" left="0" bottom="0" right="0" skin="whiteSkin" active="true">
+	
+		<!-- A utility method to find a Content in the current Container -->
+		<behavior>		
+            <method id="getContentFromContainer" params="contentName, container">
+	            <![CDATA[
+	                
+                	var found = false;
+                	var currentContent =  container.first; // = container.first;
+                	for (var i = 0; i < container.length && !found; i++) {                	
+                		
+                		if (currentContent.name) {
+                			found = (currentContent.name == contentName);
+                		}                		
+                		
+                		if (!found) {
+                			currentContent = currentContent.next;
+                		}       		
+                	}    
+                	            	
+                	if (found) {
+                		return currentContent;
+                	}
+                	            	
+                	return null;
+	            ]]>
+        	</method>
+        	<method id="onTouchBegan" params="content, id, x, y, ticks">
+                <![CDATA[                    
+                    this.touchBeganTicks = ticks;
+                ]]>
+            </method>
+            <method id="onTouchEnded" params="content, id, x, y, ticks">
+                <![CDATA[
+                                     
+                    if (ticks - application.behavior.touchBeganTicks > 1000 && application.behavior.lockStatus == "locked") {
+                    
+                    	application.behavior.sendIntrusionAlert();
+                    	application.behavior.touchBeganTicks = 0;
+                    }                     
+                ]]>
+            </method> 	 
+        </behavior>
+	</container>
+   	<label id="TitleLabel" name="titleLabel" top="10" style="titleStyle" string="'Door Controller'"/>
+   	<picture id="LockPicture" top="35" name="lockPicture" url="'./assets/closed-lock.png'" />
+   	<label id="MessageLabel" top="135" name="messageLabel" style="msgStyle"/>
+          
+	<script>
+	<![CDATA[
+		
+		/*
+		 * Your Apstrata application configuration
+		 */
+		var AUTH_KEY = "EC6EE27BA0";
+		var ID = "doorController";
+		var TOKEN = "00FEE22B3F7C2083E9E2B98010BCD79D";
+		var PWD = "d00RC";
+		var URL = "https://wot.apstrata.com/apsdb/rest"; 
+		
+		/*
+		 * Configure the behavior of the application
+		 */
+		var behavior = new ApplicationBehavior();
+		behavior.timePressed = 0;
+		behavior.pressure = 0;
+		behavior.isOpen = false;
+		application.behavior = behavior;
+		
+		/*
+		 * Create the main container of the application
+		 */
+		var controllerContainer = new ControllerContainer();
+		var title = new TitleLabel();
+		title.string = "Door Controller";
+		controllerContainer.add(title);
+		var lockPicture = new LockPicture();
+		lockPicture.url = "./assets/closed-lock.png";
+		controllerContainer.add(lockPicture);
+		application.add(controllerContainer);
+		
+	]]>
+	</script>
+</program>
