@@ -303,10 +303,10 @@
 		/*
 		 * Your Apstrata application configuration
 		 */
-		var AUTH_KEY = "EC6EE27BA0";
+		var AUTH_KEY = "EC6EF27BA4"; // Replace with your Apstrata Auth key
 		var ID = "doorController";
-		var TOKEN = "00FEE22B3F7C2083E9E2B98010BCD79D";
-		var PWD = "d00RC";
+		var TOKEN = "0AFFE22B3F7C2083E9E2B98010BCD79D"; // Replace with your device token
+		var PWD = "myPassw0rd"; // Replace with your device password
 		var URL = "https://wot.apstrata.com/apsdb/rest"; 
 		
 		/*
