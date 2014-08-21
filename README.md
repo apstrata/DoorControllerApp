@@ -23,11 +23,19 @@ an email to a pre-configured user, with two links, one to discard the alert and 
 How it works
 ============
 
+**Detection and authentication of nearby users**
+
 * When the DoorControllerApp (hereafter referred to as "controller") is launched, it starts sharing itself on the 
 local network (so it can be discovered by a DoorControllerClientApp instance). It also triggers a call to Apstrata's GetDevice API (part of Device Management APIs) in order to retrieve data about the controller device, notably its type
 that it displays on the screen instead of the aforementioned generic title)
 * When the DoorControllerClientApp instance (hereafter referred to as "client") discovers the controller, it sends
 it a message ("/credentials" handler), providing it with a username (the user of the client device), an authentication
 token (identifying that user against Apstrata) and an instruction (open)
-* The controller uses the received token and username to authenticate the 
+* The controller uses the received token and username to sign a call to Apstrata's GetUser API and retrieve the user's
+profile (if token is valid). It displays a welcome message customized with the user's name obtained from the profile.
 
+**Detection of intrusion attempts**
+
+* onTouchBegan/onTouchEnded and onKeyDown events are consumed by specific handlers in the controller app. Once a
+given threashold (pre-configured in the app) is reached, the controller invokes Apstrata's RunScript API in order to 
+execute the "apstrata.kinoma.api.HandleIntrusionManagement" script, which triggers the instrusion management process.
