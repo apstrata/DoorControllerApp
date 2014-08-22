@@ -11,7 +11,7 @@ How to use
 ==========
 
 * Import the DoorControllerApp project into Kinoma Studio
-* Import the [kinoma-sdk](https://github.com/apstrata/kinoma-sdk) to Kinoma studio and link it to your project (or just copy the "apstrataClientModule.js" file 
+* Import the [kinoma-sdk](https://github.com/apstrata/kinoma-sdk) to Kinoma studio and link it to your project (or just copy the "apstrataClientModule.js" file into the "src" folder.
 * Make sure you have deployed the back-end scripts available in [DoorControllerApp-backend](https://github.com/apstrata/DoorControllerApp-backend) on your Apstrata application account
 * Make sure that you have specified adequate values for your test in the "apstrata.kinoma.config" file (back-end)
 * Make sure that you have specified adequate values for your test in the main.xml file (DoorControllerApp/src/main.xml)
