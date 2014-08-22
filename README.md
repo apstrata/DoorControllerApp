@@ -15,6 +15,11 @@ How to use
 * Make sure you have deployed the back-end scripts available in [DoorControllerApp-backend](https://github.com/apstrata/DoorControllerApp-backend) on your Apstrata application account
 * Make sure that you have specified adequate values for your test in the "apstrata.kinoma.config" file (back-end)
 * Make sure that you have specified adequate values for your test in the main.xml file (DoorControllerApp/src/main.xml)
+  * Set the value of the AUTH_KEY variable to your Apstrata auth key
+  * Set the value of the ID variable to the id of your device (as specified in your Apstrata app)
+  * Set the value of the PWD variable to the password of the aforementioned device
+  * Set the value of the TOKEN variable to the token of the device
+  * Make sure that the value of the URL variable points to your Apstrata cluster endpoint
 * Right-click on "application.xml" > "Run as" > "Kinoma simulator"
 * This opens a virtual Kinoma player and displays a white screen with a red lock with a generic title 
 (Door Controller)
