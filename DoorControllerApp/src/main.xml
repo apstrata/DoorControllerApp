@@ -7,7 +7,8 @@
 	If GetUser returns a the user's profile, the door controller will unlock the door (displays an open lock
 	on the screen).
 	The program also simulates a breaking in attemps by detecting some pressure on the door lock (the current 
-	implementation uses the number of times a key was pressed on the keyboard)
+	implementation uses the number of times a key was pressed on the keyboard or the duration of a mouse clicked
+	event)
 	After a certain threashold, a call is made to an Apstrata script to notify about the breaking in attemps.
 	The call is signed with the authentication token of the door controller (hardcoded in the below)
 -->
